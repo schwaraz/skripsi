@@ -8,6 +8,7 @@ from sympy import symbols, Eq, solve
 import mysql.connector
 import datetime
 import time
+import math
 import numpy as np
 import queue
 jumlahdata=0
@@ -49,29 +50,35 @@ state3= False
 dummytopic1=None
 dummytopic2=None
 dummytopic3=None
-def jaraksesungguhnya(xanchor1,yanchor1,zanchor1,xanchor2,yanchor2,zanchor2,xanchor3,yanchor3,zanchor3,a1,a2,a3,center):
-    # inputx=input("x=")
-    # inputy=input("y=")
-    # inputz=input("z=")
-    inputx=2
-    inputy=1.3
-    inputz=0.75
-    r1=((inputx-xanchor1)**2+(inputy-yanchor1)**2+(inputz-zanchor1)**2)
-    r2=((inputx-xanchor2)**2+(inputy-yanchor2)**2+(inputz-zanchor2)**2)
-    r3=((inputx-xanchor3)**2+(inputy-yanchor3)**2+(inputz-zanchor3)**2)
-    data=open("datatrianggulasiv3.log", "a")
-    data.write("hasil sesungguhnya="+str(r1)+","+str(r2)+","+str(r3))
-    data.write(" anchor("+str(xanchor1)+","+str(yanchor1)+","+str(zanchor1)+")("+str(xanchor2)+","+str(yanchor2)+","+str(zanchor2)+")("+str(xanchor3)+","+str(yanchor3)+","+str(zanchor3)+")")
-    if center is not None:
-        for i, solution in enumerate(center):
-            x_val = solution[0]
-            y_val = solution[1]
-            z_val = solution[2]
-            data.write(str(x_val)+str(y_val)+str(z_val))
+def calculate_reduction(input_data):
+    if input_data < 3:
+        reduction = 0
+    elif input_data > 3 and input_data<3.3:
+        reduction = 0
+    elif input_data >= 3.3 and input_data<4.8:
+        reduction = 0.1
+    elif input_data >= 3.8 and input_data<4.4:
+        reduction = 0.15
+    elif input_data >= 4.5 and input_data < 4.7:
+        reduction = 0.2
+    elif input_data >= 4.7 and input_data<4.9:
+        reduction = 0.5
+    elif input_data < 5:
+        reduction = 0.7
     else:
-        data.write("trilaterasi gagal")
-    data.write("\n")
+        reduction = (input_data - 4) * 0.2 
 
+    return reduction
+def jaraksesungguhnya(xanchor1,yanchor1,zanchor1,xanchor2,yanchor2,zanchor2,xanchor3,yanchor3,zanchor3,a1,a2,a3,center):
+    print("masuk")
+    inputx=0
+    inputy=-3
+    inputz=0
+
+    r1=math.sqrt((inputx-xanchor1)**2+(inputy-yanchor1)**2+(inputz-zanchor1)**2)
+    r2=math.sqrt((inputx-xanchor2)**2+(inputy-yanchor2)**2+(inputz-zanchor2)**2)
+    r3=math.sqrt((inputx-xanchor3)**2+(inputy-yanchor3)**2+(inputz-zanchor3)**2)
+    return r1,r2,r3
 
 barrier = threading.Barrier(3)  # Number of threads
 class KalmanFilter(object):
@@ -165,7 +172,7 @@ class KalmanFilter(object):
 
 def solve_inequalities(x1, y1, z1, x2, y2, z2, x3, y3, z3,r1,r2, r3):
     x, y, z = symbols('x y z')
-    # print(x1, y1, z1, x2, y2, z2, x3, y3, z3,r1,r2, r3)
+    print(x1, y1, z1, x2, y2, z2, x3, y3, z3,r1,r2, r3)
     eq1 = Eq((x - x1)**2 + (y - y1)**2 + (z - z1)**2 , r1**2)
     eq2 = Eq((x - x2)**2 + (y - y2)**2 + (z - z2)**2 , r2**2)
     eq3 = Eq((x - x3)**2 + (y - y3)**2 + (z - z3)**2 , r3**2)
@@ -181,11 +188,9 @@ def solve_inequalities(x1, y1, z1, x2, y2, z2, x3, y3, z3,r1,r2, r3):
         z_val = solution[2]
         if x_val.is_real and y_val.is_real and z_val.is_real:
             print("trianggulasi berhasil data real")
-            # data.write("\n")
 
             return solutions
     print("trianggulasi gagal data complex imaginary")
-    # data.write("\n")
     return None
     
 def conecttopic1(dummy):
@@ -208,15 +213,27 @@ def conecttopic3(dummy):
     client.connect(dummy)     # Connect to MQTT broker
     client.subscribe("esp32/jarak3")     # Handler function for topic1
     client.loop_forever()
-def senddata(dummy,koordinat):
+def senddata(dummy,koordinat,hslsesungguhnya,data1,data2,data3):
         # Extract x and y values from the koordinat tuple
-    x, y, _ = koordinat
-    # Convert x and y to strings
-    x = str(x)
-    y = str(y)
+    global xanchor1,yanchor1,xanchor2,yanchor2,xanchor3,yanchor3,zanchor3,zanchor2,zanchor1
+    if koordinat != "error":
+        x, y, _ = koordinat
+        # Convert x and y to strings
+        x = str(x)
+        y = str(y)
+    else:
+        x="gagal"
+        y="gagal"
     
+    r1,r2,r3=hslsesungguhnya
+    r1 = str(r1)
+    r2 = str(r2)
+    r3 = str(r3)
+    data1 = str(data1)
+    data2 = str(data2)
+    data3 = str(data3)
     # Create a dictionary with x and y keys
-    data_dict = {'x': x, 'y': y}
+    data_dict = {'x': x, 'y': y, 'harusnyaa1':r1,'harusnyaa2':r2,'harusnyaa3':r3,'a1':data1,'a2':data2,'a3':data3,'xa1':xanchor1,'ya1':yanchor1,'za1':zanchor1,'xa2':xanchor2,'ya2':yanchor2,'za2':zanchor2,'xa3':xanchor3,'ya3':yanchor3,'za3':zanchor3}
     
     tes = json.dumps(data_dict)
     # datadummy=np.array(koordinat)
@@ -225,6 +242,8 @@ def senddata(dummy,koordinat):
     client = mqtt.Client()
     client.connect(dummy)     # Connect to MQTT broker
     print(tes)
+    client.publish("log","berhasil melakukan trilaterasi dengan posisi x="+x+"dan y="+y)
+    client.publish("xy",tes)
     client.publish("hasilkoordinat",tes)
     client.publish("x",x)
 
@@ -240,7 +259,6 @@ def handle_topic1_message(client, userdata, message,):
     global dummytopic1
     global restartx
     jumlahdata+=1
-    
     # file_path = 'jarak1tembuslemari.txt'  # Replace with the actual file path
     # file = open(file_path, 'a')
     # Write content to the file
@@ -250,6 +268,7 @@ def handle_topic1_message(client, userdata, message,):
     #     file.close()
     try:
         measurement=float(payload)
+        measurement= round(measurement,2)
         if(measurement<10 and measurement>=0):
             # print(measurement)
             restartx+=1
@@ -290,6 +309,7 @@ def handle_topic1_message(client, userdata, message,):
             else:
                 delta=dummytopic1-measurement
                 if -3-i1<delta<3+i1:
+                #     pass
                     kf1.update(measurement)
     except ValueError:
         pass
@@ -301,12 +321,12 @@ def handle_topic2_message(client, userdata, message):
     global dummytopic2
     global i2
     global restarty
-    # print("topik2")
 
     try:
         measurement=float(payload)
+        measurement= round(measurement,2)
+
         if(measurement<10 and measurement>=0):
-            # print(measurement)
             restarty+=1
 
             if state2 == False:
@@ -341,6 +361,7 @@ def handle_topic2_message(client, userdata, message):
             else:
                 delta=dummytopic2-measurement
                 if -3-i2<delta<3+i2:
+                #     pass
                     kf2.update(measurement)
     except ValueError:
         pass
@@ -355,10 +376,11 @@ def handle_topic3_message(client, userdata, message):
     global i3
     global restartz
     global dummytopic3
-    # print("topik3")
 
     try:
         measurement=float(payload)
+        measurement= round(measurement,2)
+
         if(measurement<15 and measurement>=0):
             # print(measurement)
             restartz+=1
@@ -404,13 +426,13 @@ if __name__ == '__main__':
     F = np.array([[1, dt, 0], [0, 1, dt], [0, 0, 1]])
     H = np.array([1, 0, 0]).reshape(1, 3)
     Q = np.array([[0.05, 0.05, 0.0], [0.05, 0.05, 0.0], [0.0, 0.0, 0.0]])
-    R = np.array([0.5]).reshape(1, 1)
+    R = np.array([0.1]).reshape(1, 1)
 
     kf1 = KalmanFilter(F = F, H = H, Q = Q, R = R)
     kf2 = KalmanFilter(F = F, H = H, Q = Q, R = R)
     kf3 = KalmanFilter(F = F, H = H, Q = Q, R = R)
 
-    broker_address = "192.168.180.12"
+    broker_address = "192.168.185.12"
 t1 = threading.Thread(target=conecttopic1, args=(broker_address,))
 t2 = threading.Thread(target=conecttopic2, args=(broker_address,))
 t3 = threading.Thread(target=conecttopic3, args=(broker_address,))
@@ -444,20 +466,34 @@ while True:
                 state1 = False
                 state2 = False
                 state3 = False
+            data1[0] = round(data1[0], 2)
+            data2[0] = round(data2[0], 2)
+            data3[0] = round(data3[0], 2)
+            # result = calculate_reduction(data1[0])
+            # data1[0]=data1[0]+result
+            # result = calculate_reduction(data2[0])
+            # data2[0]=data2[0]+result
+            # result = calculate_reduction(data3[0])
+            # data3[0]=data3[0]+result
+            # data1[0] = round(data1[0], 2)
+            # data2[0] = round(data2[0], 2)
+            # data3[0] = round(data3[0], 2)
+            
             center = solve_inequalities(xanchor1,yanchor1,zanchor1,xanchor2,yanchor2,zanchor2,xanchor3,yanchor3,zanchor3,data1[0],data2[0],data3[0])
             hitung = jaraksesungguhnya(xanchor1,yanchor1,zanchor1,xanchor2,yanchor2,zanchor2,xanchor3,yanchor3,zanchor3,data1[0],data2[0],data3[0],center)
-            # print("anchor1=",data1,"anchor2=",data2,"anchor3=",data3)
             if center is not None:
                 for i, solution in enumerate(center):
                     x_val = solution[0]
                     y_val = solution[1]
                     z_val = solution[2]
-                    # print(f"Solution {i+1}: (x, y, z) = ({x_val}, {y_val}, {z_val})")
-                kirimdata = threading.Thread(target=senddata, args=(broker_address,center[0]))
+                kirimdata = threading.Thread(target=senddata, args=(broker_address,center[0],hitung,data1[0],data2[0],data3[0],))
                 kirimdata.start()
 
             else:
-                print("No solution found.")
+                pesan= "error"
+                kirimdata = threading.Thread(target=senddata, args=(broker_address,pesan,hitung,data1[0],data2[0],data3[0],))
+                kirimdata.start()
+
             # if center is not None:
             #     print(center)
             #     kirimdata = threading.Thread(target=senddata, args=(broker_address,center))
