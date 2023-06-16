@@ -6,7 +6,37 @@ from PyQt5.QtGui import QIcon, QPainter, QColor, QBrush, QFont, QPainterPath, QP
 import subprocess
 import time
 import os
+import datetime
+import logging
+from logging.handlers import TimedRotatingFileHandler
 from PyQt5.QtCore import Qt, QTimer
+
+# Inisialisasi logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Get the path to the log folder
+log_folder = os.path.join(os.getcwd(), "log")
+
+# Create the log folder if it doesn't exist
+if not os.path.exists(log_folder):
+    os.makedirs(log_folder)
+
+current_date = datetime.date.today()
+# Convert the current_date object to a string representation
+formatted_date = current_date.strftime("%Y-%m-%d")
+# Specify the log file path
+log_filename = os.path.join(log_folder, "api_" + formatted_date + ".log")
+
+file_handler = TimedRotatingFileHandler(log_filename, when="midnight", interval=1, backupCount=7)
+
+# Menentukan format log
+log_format = "%(asctime)s - %(levelname)s - %(message)s"
+formatter = logging.Formatter(log_format)
+file_handler.setFormatter(formatter)
+
+# Menambahkan handler ke logger
+logger.addHandler(file_handler)
 
 def is_process_running():
     process_name="controlpanel.py"
@@ -75,8 +105,7 @@ class DashboardWindow(QMainWindow):
 
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_message = self.on_message
-        self.mqtt_client.connect("192.168.185.12")
-        self.mqtt_client.subscribe("Log")
+        self.mqtt_client.connect("192.168.0.166")
         self.mqtt_client.subscribe("esp32/jarak1")  # Subscribe to "esp32/jarak1" topic
         self.mqtt_client.subscribe("esp32/jarak2")  # Subscribe to "esp32/jarak2" topic
         self.mqtt_client.subscribe("esp32/jarak3")  # Subscribe to "esp32/jarak3" topic
@@ -143,9 +172,10 @@ class DashboardWindow(QMainWindow):
             self.debug_text.append("API sudah sedang berjalan")
         else:
             subprocess.Popen("python3 api.py", shell=True)
-            self.debug_text.append("API menyala .........")
 
         
+
+
 
     def show_debug(self):
         # Check if debug log tab already exists
@@ -160,7 +190,11 @@ class DashboardWindow(QMainWindow):
         debug_layout = QVBoxLayout(debug_widget)
         debug_layout.setContentsMargins(0, 0, 0, 0)
         debug_layout.setSpacing(0)
-        debug_layout.addWidget(self.debug_text)
+
+        # Create a QTextEdit widget to display the log file contents
+        log_text = QTextEdit()
+        log_text.setReadOnly(True)
+        debug_layout.addWidget(log_text)
 
         remove_button = QPushButton("Remove", debug_widget)
         remove_button.setStyleSheet("QPushButton { border: none; padding: 5px; }")
@@ -170,6 +204,30 @@ class DashboardWindow(QMainWindow):
         self.tab_widget.addTab(debug_widget, "Debug Log")
         self.tab_widget.setCurrentWidget(debug_widget)
         self.debug_tabs.append(debug_widget)
+
+        # Get the initial path to the log file
+        log_file_path = os.path.join(log_folder, "api_" + formatted_date + ".log")
+
+        def update_log_contents():
+            nonlocal log_text, log_file_path
+
+            # Read the contents of the log file
+            with open(log_file_path, "r") as file:
+                log_contents = file.read()
+
+            # Display the log contents in the QTextEdit widget
+            log_text.setText(log_contents)
+
+        # Update log contents initially
+        update_log_contents()
+
+        # Create a QTimer to trigger the update every 10 seconds
+        timer = QTimer()
+        timer.timeout.connect(update_log_contents)
+        timer.start(10000)  # 10,000 milliseconds = 10 seconds
+
+        # Keep a reference to the timer to prevent it from being garbage collected
+        self.debug_timer = timer
 
     def show_status(self):
         # Check if status log tab already exists
@@ -245,17 +303,63 @@ class DashboardWindow(QMainWindow):
                     subprocess.run(['kill', str(pid)])
                     print(f"Process with PID {pid} killed.")
                     if dummy==False:
-                        self.debug_text.append("proses dihentikan")
+                        logger.info("stoping api")
+
                         dummy=True
 
                 except subprocess.CalledProcessError:
                     print(f"Failed to kill process with PID {pid}.")
-                    self.debug_text.append("gagal proses dihentikan")
+                    logger.info("stoping api failed. proses is not found or not running")
 
         else:
             print(f"No process with name '{process_name}' is currently running.")
-            self.debug_text.append("proses {process_name} tidak ditemukan")
+            logger.info("no proses api found")
+        # process_name="api.py"
+        # command = f"pgrep -f {process_name}"
+        # result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # output = result.stdout.decode().strip()
+        # dummy=False
+        # if output:
+        #     pids = output.split('\n')
+        #     for pid in pids:
+        #         pid = int(pid)
+        #         try:
+        #             subprocess.run(['kill', str(pid)])
+        #             print(f"Process with PID {pid} killed.")
+        #             if dummy==False:
+        #                 self.debug_text.append("proses dihentikan")
+        #                 dummy=True
 
+        #         except subprocess.CalledProcessError:
+        #             print(f"Failed to kill process with PID {pid}.")
+        #             self.debug_text.append("gagal proses dihentikan")
+
+        # else:
+        #     print(f"No process with name '{process_name}' is currently running.")
+        #     self.debug_text.append("proses {process_name} tidak ditemukan")
+        process_name="kodenormal.py"
+        command = f"pgrep -f {process_name}"
+        result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output = result.stdout.decode().strip()
+        dummy=False
+        if output:
+            pids = output.split('\n')
+            for pid in pids:
+                pid = int(pid)
+                try:
+                    subprocess.run(['kill', str(pid)])
+                    print(f"Process with PID {pid} killed.")
+                    if dummy==False:
+                        logger.info("stoping trilateration sucsses")
+                        dummy=True
+
+                except subprocess.CalledProcessError:
+                    print(f"Failed to kill process with PID {pid}.")
+                    logger.info("stoping trilateration faild")
+
+        else:
+            print(f"No process with name '{process_name}' is currently running.")
+            logger.info("no proses trilateration found")
     def on_message(self, client, userdata, msg):
         if msg.topic == "Log":
             self.debug_text.append(msg.payload.decode())
